@@ -1,0 +1,66 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <dirent.h>
+#include <errno.h>
+#include <string.h>
+#include <sys/stat.h> // Required for struct stat and S_ISDIR
+#include <linux/limits.h> // Required for PATH_MAX
+
+
+typedef struct Node {
+    char *name;              //File or Directory name
+    int is_directory         //1 if directory, 0 if file
+    struct Node **children   // Array of child nodes (for directories. )
+    int child_count;         //Number of children
+    int child_capacity;      //Max capacity before resizing
+} Node;
+
+void add_child(Node *parent, Node *child) {
+    if (!parent->is_directory) {
+        fprintf(stderr, "Error: Cannot add a child to a file node!\n");
+        return;
+    }
+
+    // Expand children array if needed
+    if (parent->child_count == parent->child_capacity) {
+        parent->child_capacity = (parent->child_capacity == 0) ? 4 : parent->child_capacity * 2;
+        parent->children = (Node **)realloc(parent->children, parent->child_capacity * sizeof(Node *));
+        if (!parent->children) {
+            fprintf(stderr, "Memory allocation failed for children\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    // Add child node
+    parent->children[parent->child_count++] = child;
+}
+
+
+void main_file_grabber(Node* parent_node, char* dir_name){
+    DIR* dp;
+	struct dirent* dirp;
+    struct stat statbuf;
+    char path[1024];
+
+    dp = opendir(dir_name);
+	//check if directory can open
+	if (dp == NULL){
+		printf("Could not open directory \n");
+		return;
+	}
+
+    while((dirp = readdir(dp)) != NULL){
+        if (strcmp(dirp->d_name, ".") == 0 || strcmp(dirp->d_name, "..") == 0) continue;
+
+        snprintf(path, sizeof(path), "%s/%s", dir_name, dirp->d_name);
+
+        if (lstat(path, &statbuf) == 0) {
+            Node *child = create_node(dirp->d_name, S_ISDIR(statbuf.st_mode))
+            add_child(parent_node, child)
+
+            if (S_ISDIR(statbuf.st_mode)) main_file_grabber(child, path);
+        }
+    }
+    closedir(dp);
+}
